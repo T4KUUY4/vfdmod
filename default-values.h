@@ -50,6 +50,13 @@
 /* Spindle RPM-out group */
 #define GROUP_SPINDLE_OUT           "SpindleRpmOut"
 
+/* Ramp time group (optional) */
+#define GROUP_RAMP_TIME             "RampTime"
+#define KEY_DEFAULT_SECONDS         "DefaultSeconds"
+#define KEY_MIN_SECONDS             "MinSeconds"
+#define KEY_MAX_SECONDS             "MaxSeconds"
+#define VALUE_MIN_SECONDS           "0"
+
 /* User parameter group */
 #define KEY_BIT_MASK                "BitMask"
 #define KEY_PIN_TYPE                "PinType"
@@ -69,6 +76,9 @@
 #define HAL_GROUP_USER_PARAMETERS   "parameters"
 #define HAL_GROUP_SPINDLE           "spindle"
 #define HAL_GROUP_CONTROL           "control"
+#define HAL_GROUP_RAMP              "ramp"
+#define HAL_PIN_RAMP_TIME           "time"
+#define HAL_PIN_RAMP_TIME_APPLIED   "time-applied"
 #define HAL_PIN_AT_SPEED            "at-speed"
 #define HAL_PIN_RPM_IN              "rpm-in"
 #define HAL_PIN_RPM_OUT             "rpm-out"

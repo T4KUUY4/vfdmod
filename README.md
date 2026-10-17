@@ -5,6 +5,7 @@ Vfdmod is a LinuxCNC user space component designed to control any VFD that suppo
 - Setting command speed with MODBUS function codes 0x06 (write holding register) and 0x10 (write multiple holding registers).
 - Setting control word with MODBUS function codes 0x06, 0x10, 0x05 (write coil) and 0x0F (write multiple coils).
 - Reading any count of user defined parameters with MODBUS function codes 0x01 and 0x03.
+- Optional ramp time register, set at runtime from a HAL pin (e.g. from G-code via M68).
 - Four types of user defined parameters are supported: bit, float, s32 and u32.
 - Built-in PyVcp generator.
 - RS485 connection state monitoring including total error count and last error code.
@@ -27,6 +28,12 @@ English support forum: [https://forum.linuxcnc.org/](https://forum.linuxcnc.org/
 Russian support forum: [http://www.cnc-club.ru/](http://www.cnc-club.ru/forum/viewtopic.php?p=557679)
 
 # History
+Vfdmod 0.3.3:
+- Optional [RampTime] group: writes a ramp time register from HAL pin `ramp.time` (seconds).
+  - Value <= 0 uses `DefaultSeconds`, clamped to `MinSeconds`..`MaxSeconds`.
+  - Written only on change and again after a communication error.
+  - Pin `ramp.time-applied` shows the last value written.
+
 Vfdmod 0.3.2:
 - User defined HAL pins may be boolean (bit type):
   - Function code 0x01 (read coils) supported.

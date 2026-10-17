@@ -11,6 +11,8 @@ const char *github="Sources: https://github.com/aekhv/vfdmod/\n";
 const char *copyright = "2020 (c) Alexander E. (Khabarovsk, Russia)\n";
 
 int checkFlag, debugFlag, exitFlag, okCounter, serialDeviceIsOpened;
+// Last ramp time written to the VFD, < 0 forces a (re)write.
+double rampSecondsWritten = -1;
 QString exeName;
 hal_main_data_t *hal_mdata;
 hal_user_data_t **hal_udata;
@@ -188,10 +190,67 @@ fail:
     return -1;
 }
 
+int write_ramp_time(modbus_t *ctx, main_config_t &mconfig)
+{
+    int result = 0;
+    uint16_t value;
+    double seconds = *hal_mdata->rampTime;
+
+    if (seconds <= 0)
+        seconds = mconfig.ramp.defaultSeconds;
+
+    if (seconds < mconfig.ramp.minSeconds)
+        seconds = mconfig.ramp.minSeconds;
+
+    if (seconds > mconfig.ramp.maxSeconds)
+        seconds = mconfig.ramp.maxSeconds;
+
+    // Only write on change or after a communication error
+    if (seconds == rampSecondsWritten)
+        return 0;
+
+    value = int(round(seconds * mconfig.ramp.multiplier / mconfig.ramp.divider));
+
+    if (debugFlag)
+        printf("\n%s: setting ramp time to %.2f s, value %d (0x%04X)...\n",
+               qPrintable(exeName), seconds, value, value);
+
+    protocol_delay(mconfig.rs485);
+
+    // Function code 0x06
+    if (mconfig.ramp.functionCode == MODBUS_FUNC_WRITE_SINGLE_HOLDING_REGISTER)
+        result = modbus_write_register(ctx, mconfig.ramp.address, value);
+
+    // Function code 0x10
+    if (mconfig.ramp.functionCode == MODBUS_FUNC_WRITE_MULTIPLE_HOLDING_REGISTERS)
+        result = modbus_write_registers(ctx, mconfig.ramp.address, 1, &value);
+
+    if (result != 1)
+        goto fail;
+    else
+        okCounter++;
+
+    rampSecondsWritten = seconds;
+    *hal_mdata->rampTimeApplied = seconds;
+
+    return 0;
+fail:
+    *hal_mdata->lastError = errno;
+    (*hal_mdata->errorCount)++;
+    okCounter = 0;
+    return -1;
+}
+
 int write_modbus_data(modbus_t *ctx, main_config_t &mconfig)
 {
     int result = 0;
     uint16_t value;
+
+    /* Setting ramp time first, so a new ramp applies to a speed change
+       arriving in the same loop */
+    if (mconfig.ramp.enabled)
+        if (write_ramp_time(ctx, mconfig) < 0)
+            return -1;
 
     /* Setting command speed */
     hal_float_t speed = abs(*hal_mdata->spindleRpmIn);
@@ -512,6 +571,25 @@ int main(int argc, char *argv[])
                               HAL_PIN_RUN_REVERSE))
         goto fail;
 
+    if (mconfig.ramp.enabled) {
+
+        if (0 != hal_pin_float_newf(HAL_IN, &(hal_mdata->rampTime), hal_comp_id, "%s.%s.%s",
+                                    qPrintable(mconfig.common.componentName),
+                                    HAL_GROUP_RAMP,
+                                    HAL_PIN_RAMP_TIME))
+            goto fail;
+
+        if (0 != hal_pin_float_newf(HAL_OUT, &(hal_mdata->rampTimeApplied), hal_comp_id, "%s.%s.%s",
+                                    qPrintable(mconfig.common.componentName),
+                                    HAL_GROUP_RAMP,
+                                    HAL_PIN_RAMP_TIME_APPLIED))
+            goto fail;
+
+        // 0 = use DefaultSeconds
+        *hal_mdata->rampTime        = 0;
+        *hal_mdata->rampTimeApplied = 0;
+    }
+
     *hal_mdata->isConnected   = 0;
     *hal_mdata->errorCount    = 0;
     *hal_mdata->lastError     = 0;
@@ -665,6 +743,8 @@ int main(int argc, char *argv[])
         if (okCounter == 0) {
             *hal_mdata->spindleRpmOut = 0;
             *hal_mdata->atSpeed = 0;
+            // The VFD may have lost the ramp time (e.g. power cycle), write it again
+            rampSecondsWritten = -1;
             for (int i = 0; i < uconfig.count(); ++i) {
                 switch (uconfig.at(i).pinType) {
                 case HAL_FLOAT:

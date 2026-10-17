@@ -67,6 +67,19 @@ typedef struct {
     int divider;
 } spindle_out_config_t;
 
+/* Ramp time settings (optional group) */
+typedef struct {
+    int enabled;
+    int functionCode;
+    int address;
+    int multiplier;
+    int divider;
+    // Used when the HAL pin is <= 0, e.g. right after LinuxCNC start.
+    double defaultSeconds;
+    double minSeconds;
+    double maxSeconds;
+} ramp_config_t;
+
 /* Main INI-file settings */
 typedef struct {
     common_config_t common;
@@ -74,6 +87,7 @@ typedef struct {
     control_config_t control;
     spindle_in_config_t rpmIn;
     spindle_out_config_t rpmOut;
+    ramp_config_t ramp;
 } main_config_t;
 
 /* User parameter structure */
@@ -104,6 +118,10 @@ typedef struct {
     hal_bit_t   *atSpeed;
     hal_float_t *spindleRpmIn;
     hal_float_t *spindleRpmOut;
+
+    /* Ramp time pins, only created when [RampTime] exists */
+    hal_float_t *rampTime;
+    hal_float_t *rampTimeApplied;
 } hal_main_data_t;
 
 /* Three type of data for an each user parameter */

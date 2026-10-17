@@ -609,6 +609,128 @@ fail_out_of_range:
     return -1;
 }
 
+int load_ramp_group(QSettings &ini, ramp_config_t &ramp)
+{
+    bool ok;
+    QString key, value;
+    double registerMaxSeconds;
+
+    ini.beginGroup(GROUP_RAMP_TIME);
+    if (checkFlag)
+        printf("\n[%s]\n", qPrintable(GROUP_RAMP_TIME));
+
+    /* Function code */
+    value = ini.value(key = KEY_FUNCTION_CODE, QString("%1").arg(MODBUS_FUNC_WRITE_SINGLE_HOLDING_REGISTER)).toString();
+
+    if (value.toLower().startsWith("0x"))
+        ramp.functionCode = hex_to_int(value, &ok);
+    else
+        ramp.functionCode = value.toInt(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if ((ramp.functionCode != MODBUS_FUNC_WRITE_SINGLE_HOLDING_REGISTER)
+            && (ramp.functionCode != MODBUS_FUNC_WRITE_MULTIPLE_HOLDING_REGISTERS))
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t: 0x%02X (%d)\n", KEY_FUNCTION_CODE, ramp.functionCode, ramp.functionCode);
+
+    /* Address */
+    value = ini.value(key = KEY_ADDRESS, "").toString();
+
+    if (value.toLower().startsWith("0x"))
+        ramp.address = hex_to_int(value, &ok);
+    else
+        ramp.address = value.toInt(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if ((ramp.address < 0) || (ramp.address > 0xFFFF))
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t\t: 0x%04X (%d)\n", KEY_ADDRESS, ramp.address, ramp.address);
+
+    /* Multiplier */
+    ramp.multiplier = ini.value(key = KEY_MULTIPLIER, VALUE_MULTIPLIER).toInt(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if (ramp.multiplier <= 0)
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t: %d\n", KEY_MULTIPLIER, ramp.multiplier);
+
+    /* Divider */
+    ramp.divider = ini.value(key = KEY_DIVIDER, VALUE_DIVIDER).toInt(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if (ramp.divider <= 0)
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t\t: %d\n", KEY_DIVIDER, ramp.divider);
+
+    /* Largest time that still fits into a 16 bit register */
+    registerMaxSeconds = double(0xFFFF) * ramp.divider / ramp.multiplier;
+
+    /* Min seconds */
+    ramp.minSeconds = ini.value(key = KEY_MIN_SECONDS, VALUE_MIN_SECONDS).toDouble(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if ((ramp.minSeconds < 0) || (ramp.minSeconds > registerMaxSeconds))
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t: %.2f\n", KEY_MIN_SECONDS, ramp.minSeconds);
+
+    /* Max seconds */
+    ramp.maxSeconds = ini.value(key = KEY_MAX_SECONDS, QString::number(registerMaxSeconds)).toDouble(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if ((ramp.maxSeconds < ramp.minSeconds) || (ramp.maxSeconds > registerMaxSeconds))
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t: %.2f\n", KEY_MAX_SECONDS, ramp.maxSeconds);
+
+    /* Default seconds, required: a missing value must not end up as 0 s */
+    ramp.defaultSeconds = ini.value(key = KEY_DEFAULT_SECONDS, "").toDouble(&ok);
+
+    if (!ok)
+        goto fail_invalid_parameter;
+
+    if ((ramp.defaultSeconds <= 0)
+            || (ramp.defaultSeconds < ramp.minSeconds)
+            || (ramp.defaultSeconds > ramp.maxSeconds))
+        goto fail_out_of_range;
+
+    if (checkFlag)
+        printf("%s\t\t: %.2f\n", KEY_DEFAULT_SECONDS, ramp.defaultSeconds);
+
+    ramp.enabled = 1;
+
+    ini.endGroup();
+    return 0;
+fail_invalid_parameter:
+    fprintf(stderr, "[%s]:%s - parameter is wrong or missing!\n", GROUP_RAMP_TIME, qPrintable(key));
+    return -1;
+fail_out_of_range:
+    fprintf(stderr, "[%s]:%s - parameter is out of range!\n", GROUP_RAMP_TIME, qPrintable(key));
+    return -1;
+}
+
 int load_user_group(QSettings &ini, const QString &group, QVector<user_config_t> &uconfig)
 {
     bool ok;
@@ -829,6 +951,15 @@ int load_config(const QString &inifile, main_config_t &mconfig, QVector<user_con
     /* Loading rpm-out settings */
     if (load_rpm_out_group(ini, mconfig.rpmOut) < 0)
         return -1;
+
+    /* Ramp time group is optional */
+    mconfig.ramp.enabled = 0;
+    if (groups.contains(GROUP_RAMP_TIME, Qt::CaseInsensitive)) {
+        remove(groups, GROUP_RAMP_TIME);
+
+        if (load_ramp_group(ini, mconfig.ramp) < 0)
+            return -1;
+    }
 
     /* Now groups variable contains only user group names */
     foreach (QString group, groups) {

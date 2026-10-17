@@ -15,7 +15,7 @@ DEFINES += APP_TARGET=\\\"$$TARGET\\\"
 
 TEMPLATE = app
 
-VERSION = 0.3.2
+VERSION = 0.3.3
 DEFINES += APP_VERSION=\\\"$$VERSION\\\"
 
 INCLUDEPATH += /usr/include/linuxcnc
